@@ -24,6 +24,7 @@ public class DefaultTankerViewerIconFactory implements TankerViewerIconFactory {
 	static ImageIcon wellIcon;
 	static ImageIcon stationIcon;
 	static ImageIcon stationWithTaskIcon;
+	static ImageIcon grid;
 	
 	static {
 		// Pre-load the images
@@ -32,6 +33,7 @@ public class DefaultTankerViewerIconFactory implements TankerViewerIconFactory {
 		wellIcon = createImageIcon("images/well.png");
 		stationIcon = createImageIcon("images/station.png");
 		stationWithTaskIcon = createImageIcon("images/station_withtask.png");
+		grid = createImageIcon("images/grid.png");
 	}
 	
 	protected static ImageIcon createImageIcon(String path) {
@@ -57,9 +59,8 @@ public class DefaultTankerViewerIconFactory implements TankerViewerIconFactory {
 			} else {
 				return stationWithTaskIcon;
 			}
-			
 		} else {
-			return null;
+			return grid;
 		}
 	}
 	
