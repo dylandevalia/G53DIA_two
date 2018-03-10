@@ -48,6 +48,7 @@ public class DemoSimulator {
 		// Create a GUI window to show the fleet
 		TankerViewer tv = new TankerViewer(fleet);
 		tv.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+		
 		// Start executing the tankers in the Fleet
 		while (env.getTimestep() < DURATION) {
 			// Advance the environment timestep
@@ -55,26 +56,27 @@ public class DemoSimulator {
 			// Update the GUI
 			tv.tick(env);
 			
-			for (Tanker t : fleet) {
-				// Get the current view of the tanker
-				Cell[][] view = env.getView(t.getPosition(), Tanker.VIEW_RANGE);
-				// Let the tanker choose an action
-				Action a = t.senseAndAct(view, env.getTimestep());
-				// Try to execute the action
-				try {
-					a.execute(env, t);
-				} catch (OutOfFuelException ofe) {
-					System.err.println(ofe.getMessage());
-					System.exit(-1);
-				} catch (ActionFailedException afe) {
-					System.err.println(afe.getMessage());
-				}
-			}
+			// for (Tanker t : fleet) {
+			// 	// Get the current view of the tanker
+			// 	Cell[][] view = env.getView(t.getPosition(), Tanker.VIEW_RANGE);
+			// 	// Let the tanker choose an action
+			// 	Action a = t.senseAndAct(view, env.getTimestep());
+			// 	// Try to execute the action
+			// 	try {
+			// 		a.execute(env, t);
+			// 	} catch (OutOfFuelException ofe) {
+			// 		System.err.println(ofe.getMessage());
+			// 		System.exit(-1);
+			// 	} catch (ActionFailedException afe) {
+			// 		System.err.println(afe.getMessage());
+			// 	}
+			// }
+			
 			try {
 				Thread.sleep(DELAY);
 			} catch (Exception e) {
+			
 			}
 		}
 	}
-	
 }
