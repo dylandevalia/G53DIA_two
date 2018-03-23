@@ -2,10 +2,10 @@ package uk.ac.nott.cs.g53dia.multidemo;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Random;
+import javafx.util.Pair;
 import uk.ac.nott.cs.g53dia.multidemo.utility.Position;
 import uk.ac.nott.cs.g53dia.multilibrary.Action;
 import uk.ac.nott.cs.g53dia.multilibrary.Cell;
@@ -27,20 +27,41 @@ public class MyTanker extends Tanker {
 	private static final double FUEL_BUFFER_PERCENT = 0.1;
 	private static final double FUEL_BUFFER = Tanker.MAX_FUEL * FUEL_BUFFER_PERCENT;
 	
-	private Position pos = new Position(0, 0), lastPos = pos.copy();
+	private MyFleet fleet;
+	private int fleetIndex;
 	
-	private LinkedHashMap<FuelPump, Position> fuelPumps = new LinkedHashMap<>();
-	private LinkedHashMap<MyStation, Position> stations = new LinkedHashMap<>();
-	private LinkedHashMap<Well, Position> wells = new LinkedHashMap<>();
+	private Position pos = new Position(0, 0), lastPos = pos.copy();
 	
 	private Action lastAction = null;
 	private boolean triedToMove = false;
+	
 	private int di = 1, dj = 1;
 	private int spiralLen = Tanker.VIEW_RANGE;
 	private int segmentsPassed = 0;
 	
-	MyTanker(Random r) {
+	MyTanker(MyFleet fleet, int fleetIndex, Random r) {
+		this.fleet = fleet;
+		this.fleetIndex = fleetIndex;
 		this.r = r;
+		
+		switch (fleetIndex % 4) {
+			case 0:
+				di = 1;
+				dj = 1;
+				break;
+			case 1:
+				di = 1;
+				dj = -1;
+				break;
+			case 2:
+				di = -1;
+				dj = -1;
+				break;
+			case 3:
+				di = -1;
+				dj = 1;
+				break;
+		}
 	}
 	
 	/**
@@ -59,6 +80,12 @@ public class MyTanker extends Tanker {
 	 */
 	@Override
 	public Action senseAndAct(Cell[][] view, long timeStep) {
+		// if (fleetIndex == 0) {
+		// 	for (MyStation job : fleet.jobs) {
+		// 		job = null;
+		// 	}
+		// }
+		
 		if (actionFailed && triedToMove) {
 			// If action fail, revert expected position
 			pos = lastPos.copy();
@@ -103,11 +130,11 @@ public class MyTanker extends Tanker {
 				
 				if (cell instanceof FuelPump) {
 					// System.out.println("FuelPump");
-					fuelPumps.putIfAbsent((FuelPump) cell, cellPos);
+					fleet.fuelPumps.putIfAbsent((FuelPump) cell, cellPos);
 				} else if (cell instanceof Station) {
 					// System.out.println("Station");
 					boolean found = false;
-					for (Map.Entry<MyStation, Position> s : stations.entrySet()) {
+					for (Map.Entry<MyStation, Position> s : fleet.stations.entrySet()) {
 						if (s.getKey().equals(cell)) {
 							found = true;
 							s.getKey().updateStation((Station) cell);
@@ -115,17 +142,17 @@ public class MyTanker extends Tanker {
 						}
 					}
 					if (!found) {
-						stations.put(new MyStation((Station) cell), cellPos);
+						fleet.stations.put(new MyStation((Station) cell), cellPos);
 					}
 				} else if (cell instanceof Well) {
 					// System.out.println("Well");
-					wells.putIfAbsent((Well) cell, cellPos);
+					fleet.wells.putIfAbsent((Well) cell, cellPos);
 				}
 			}
 		}
 		
 		// Tick all stations
-		for (Map.Entry<MyStation, Position> s : stations.entrySet()) {
+		for (Map.Entry<MyStation, Position> s : fleet.stations.entrySet()) {
 			s.getKey().tick();
 		}
 		
@@ -149,6 +176,8 @@ public class MyTanker extends Tanker {
 		if (finalAction != null) {
 			return finalAction;
 		}
+		
+		fleet.jobs[fleetIndex] = null;
 		
 		finalAction = wasteCheck(wells);
 		if (finalAction != null) {
@@ -179,6 +208,8 @@ public class MyTanker extends Tanker {
 				|| (distance < Tanker.VIEW_RANGE / 5 && fuelLevel < Tanker.MAX_FUEL / 10)
 			) {
 			Action action = pos.moveToward(fuelPumps.get(0).getValue());
+			
+			fleet.jobs[fleetIndex] = null;
 			
 			if (action == null) {
 				// At fuel pump
@@ -245,12 +276,29 @@ public class MyTanker extends Tanker {
 			}
 			// vvv Is within fuel range and has a task vvv
 			
+			// Check if another agent is going to the station
+			boolean stationTaken = false;
+			for (int i = 0; i < fleet.jobs.length; i++) {
+				if (i == fleetIndex) {
+					continue;
+				}
+				if (fleet.jobs[i] == s) {
+					stationTaken = true;
+					break;
+				}
+			}
+			if (stationTaken) {
+				continue;
+			}
+			
 			// Calculate dist pos->station->fuel pump
 			ArrayList<Map.Entry<FuelPump, Position>> pumps = sortFuelPumps(p);
 			int distStationToPump = p.distanceTo(pumps.get(0).getValue());
 			if (distToStation + distStationToPump > getFuel()) {
 				continue;
 			}
+			
+			fleet.jobs[fleetIndex] = s;
 			
 			// Found nearest pump that can go to station with enough fuel
 			// to get to pump afterwards. Move towards it
@@ -259,6 +307,61 @@ public class MyTanker extends Tanker {
 		
 		return null;
 	}
+	
+	
+	private Pair<MyStation, Position> a(
+		Pair<MyStation, Position> currentStation,
+		ArrayList<Pair<MyStation, Position>> visitedStations,
+		int fuelLevel,
+		int wasteLevel
+	) {
+		// If closest station is out of fuel range
+		ArrayList<Entry<MyStation, Position>> nearbyStations = sortStations(
+			currentStation.getValue()
+		);
+		if (
+			nearbyStations.get(0).getKey().getTask() == null ||
+			currentStation.getValue().distanceTo(nearbyStations.get(0).getValue()) > fuelLevel
+		) {
+			return null;
+		}
+		
+		// Check if enough fuel to get from station to fuel pump
+		ArrayList<Entry<FuelPump, Position>> pumps = sortFuelPumps(currentStation.getValue());
+		int distToPump = currentStation.getValue().distanceTo(pumps.get(0).getValue());
+		if (distToPump > fuelLevel) {
+			return new Pair<>(null, null);
+		}
+		
+		ArrayList<Pair<MyStation, Position>> possibleStations = new ArrayList<>();
+		ArrayList<Pair<MyStation, Position>> _visitedStations = new ArrayList<>(visitedStations);
+		_visitedStations.add(currentStation);
+		for (Entry<MyStation, Position> s : nearbyStations) {
+			int distToStation = s.getValue().distanceTo(currentStation.getValue());
+			
+			Pair<MyStation, Position> r =
+				a(new Pair<>(
+						s.getKey(), s.getValue()),
+					_visitedStations,
+					fuelLevel - distToStation,
+					wasteLevel + s.getKey().getTask().getWasteRemaining()
+				);
+			
+			if (r == null) {
+				// Nearest station has no task or is out of fuel range
+				break;
+			} else if (r.getKey() == null) {
+				// Station didn't have enough fuel to get back to a pump
+				continue;
+			}
+			
+			// Add
+			possibleStations.add(r);
+		}
+		
+		return null;
+	}
+	
 	
 	/**
 	 * Checks if the tanker is on a station with a task and gets waste. If it has waste, it moves
@@ -328,12 +431,13 @@ public class MyTanker extends Tanker {
 	
 	
 	/**
-	 * Sorts {@link #stations} map by if it has waste then by distance
+	 * Sorts {@link #fleet}.stations map by if it has waste then by distance
 	 *
 	 * @return List where the first element is the closest station with waste
 	 */
 	private ArrayList<Map.Entry<MyStation, Position>> sortStations(Position distFrom) {
-		ArrayList<Entry<MyStation, Position>> sortedStations = new ArrayList<>(stations.entrySet());
+		ArrayList<Entry<MyStation, Position>> sortedStations = new ArrayList<>(
+			fleet.stations.entrySet());
 		sortedStations.sort((a, b) -> {
 			// To return:
 			//   positive if a is better
@@ -363,23 +467,24 @@ public class MyTanker extends Tanker {
 	}
 	
 	/**
-	 * Sorts the {@link #fuelPumps} map by distance from player
+	 * Sorts the {@link #fleet}.fuelPumps map by distance from player
 	 *
 	 * @return List where the first element is closest fuel pump
 	 */
 	private ArrayList<Map.Entry<FuelPump, Position>> sortFuelPumps(Position distFrom) {
-		ArrayList<Entry<FuelPump, Position>> sortedPumps = new ArrayList<>(fuelPumps.entrySet());
+		ArrayList<Entry<FuelPump, Position>> sortedPumps = new ArrayList<>(
+			fleet.fuelPumps.entrySet());
 		sortedPumps.sort(Comparator.comparingInt(a -> a.getValue().distanceTo(distFrom)));
 		return sortedPumps;
 	}
 	
 	/**
-	 * Sorts the {@link #wells} map by distance from player
+	 * Sorts the {@link #fleet}.wells map by distance from player
 	 *
 	 * @return List where the first element is the closet well
 	 */
 	private ArrayList<Map.Entry<Well, Position>> sortWells(Position distFrom) {
-		ArrayList<Entry<Well, Position>> sortedPumps = new ArrayList<>(wells.entrySet());
+		ArrayList<Entry<Well, Position>> sortedPumps = new ArrayList<>(fleet.wells.entrySet());
 		sortedPumps.sort(Comparator.comparingInt(a -> a.getValue().distanceTo(distFrom)));
 		return sortedPumps;
 	}

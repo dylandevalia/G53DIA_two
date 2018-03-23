@@ -160,8 +160,10 @@ public class TankerViewer extends JFrame implements ActionListener {
 	@Override
 	public void actionPerformed(ActionEvent arg0) {
 		tank = fleet.get(tankerList.getSelectedIndex());
-		
 	}
 	
+	public void setFleet(Fleet fleet) {
+		this.fleet = fleet;
+	}
 }
 
